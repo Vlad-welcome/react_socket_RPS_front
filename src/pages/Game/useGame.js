@@ -46,22 +46,23 @@ export function useGame(username) {
 
     socket.on(Events.NEXT_TURNED, (response) => {
       console.log("turned");
-      setTurn(true);
 
+      setTurn(true);
       setClicked((prev) => new Set(prev).add(response.cellId));
       setBtnValue((prev) => ({
         ...prev,
         [response.cellId]: response.player,
       }));
+
+      if (response.isWin) {
+        console.log("defeted");
+        window.alert("Поражение");
+        endGame();
+      }
     });
 
     socket.on(Events.EXITED, () => {
-      console.log("exited");
-      setStart(false);
-      setIsRoom(false);
-      setTurn(false);
-      setClicked(new Set());
-      setBtnValue({});
+      endGame();
     });
 
     return () => {
@@ -83,6 +84,7 @@ export function useGame(username) {
       } else {
         socket.disconnect();
         onResult(false);
+        window.alert(`Пользователь с таким именем уже существует`);
       }
     });
   };
@@ -90,10 +92,12 @@ export function useGame(username) {
   const room = () => {
     console.log("room");
     socket.emit(Events.ROOM, (response) => {
-      setBoardId(response.boardId);
+      if (response.success) {
+        setBoardId(response.boardId);
+        setIsRoom(true);
+        setPlayer(1);
+      }
     });
-    setIsRoom(true);
-    setPlayer(1);
   };
 
   const invite = (invitePlayer) => {
@@ -102,34 +106,77 @@ export function useGame(username) {
     if (!name) {
       return;
     }
-    socket.emit(Events.INVITE, name, boardId);
+    socket.emit(Events.INVITE, name, boardId, (response) => {
+      if (!response.success) {
+        window.alert(`Пользователь не в сети`);
+      }
+    });
   };
 
   const exit = () => {
-    console.log("exit");
-    setStart(false);
-    setIsRoom(false);
-    setTurn(false);
-    setClicked(new Set());
-    setBtnValue({});
+    endGame();
 
     socket.emit(Events.EXIT, boardId, enemySocketId);
   };
 
-  const nextTurn = (cellId) => {
+  const nextTurn = (cellId, isWin) => {
     console.log("nextTurn");
     setTurn(false);
-    socket.emit(Events.NEXT_TURN, boardId, cellId, player, enemySocketId);
+    socket.emit(Events.NEXT_TURN, boardId, cellId, player, enemySocketId, isWin);
   };
 
   const onClick = (cellId) => {
     console.log("click");
     setClicked((prev) => new Set(prev).add(cellId));
-    setBtnValue((prev) => ({
-      ...prev,
-      [cellId]: player,
-    }));
-    nextTurn(cellId);
+    let nextBtnValue = { ...btnValue, [cellId]: player };
+    setBtnValue(nextBtnValue);
+
+    let win = checkWin(nextBtnValue);
+    nextTurn(cellId, win);
+
+    if (win) {
+      console.log("win");
+      window.alert("Победа!!!");
+      endGame();
+    }
+  };
+
+  const endGame = () => {
+    console.log("endGame");
+    setStart(false);
+    setIsRoom(false);
+    setTurn(false);
+    setClicked(new Set());
+    setBtnValue({});
+  };
+
+  const checkWin = (nextBtnValue) => {
+    return (
+      (nextBtnValue[1] === nextBtnValue[2] &&
+        nextBtnValue[2] === nextBtnValue[3] &&
+        !!nextBtnValue[3]) ||
+      (nextBtnValue[7] === nextBtnValue[8] &&
+        nextBtnValue[8] === nextBtnValue[9] &&
+        !!nextBtnValue[9]) ||
+      (nextBtnValue[1] === nextBtnValue[4] &&
+        nextBtnValue[4] === nextBtnValue[7] &&
+        !!nextBtnValue[7]) ||
+      (nextBtnValue[3] === nextBtnValue[6] &&
+        nextBtnValue[6] === nextBtnValue[9] &&
+        !!nextBtnValue[9]) ||
+      (nextBtnValue[1] === nextBtnValue[5] &&
+        nextBtnValue[5] === nextBtnValue[9] &&
+        !!nextBtnValue[9]) ||
+      (nextBtnValue[3] === nextBtnValue[5] &&
+        nextBtnValue[5] === nextBtnValue[7] &&
+        !!nextBtnValue[7]) ||
+      (nextBtnValue[2] === nextBtnValue[5] &&
+        nextBtnValue[5] === nextBtnValue[8] &&
+        !!nextBtnValue[8]) ||
+      (nextBtnValue[4] === nextBtnValue[5] &&
+        nextBtnValue[5] === nextBtnValue[6] &&
+        !!nextBtnValue[6])
+    );
   };
 
   return {
